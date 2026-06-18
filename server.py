@@ -471,5 +471,13 @@ def main():
 
     run_server()
 
+print("DB_PATH =", DB_PATH)    
+
+try:
+    init_db()
+    print(f"Database initialized: {DB_PATH}")
+except Exception as e:
+    print(f"Database initialization failed: {e}")
+
 if __name__ == "__main__":
     main()
