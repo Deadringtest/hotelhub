@@ -19,14 +19,36 @@ PORT      = int(os.environ.get("PORT", 8766))
 app = Flask(__name__)
 
 # ── DB Connection ──────────────────────────────────────────────────────────
-import psycopg2
-import psycopg2.extras
+import pg8000
+import pg8000.native
+from urllib.parse import urlparse
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
+def parse_db_url(url):
+    p = urlparse(url)
+    return {
+        "host": p.hostname,
+        "port": p.port or 5432,
+        "database": p.path.lstrip("/"),
+        "user": p.username,
+        "password": p.password,
+        "ssl_context": True
+    }
+
 def get_db():
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    params = parse_db_url(DATABASE_URL)
+    conn = pg8000.connect(**params)
     return conn
+
+def fetchall_dict(cursor):
+    cols = [d[0] for d in cursor.description]
+    return [dict(zip(cols, row)) for row in cursor.fetchall()]
+
+def fetchone_dict(cursor):
+    cols = [d[0] for d in cursor.description]
+    row = cursor.fetchone()
+    return dict(zip(cols, row)) if row else None
 
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
@@ -139,7 +161,8 @@ def init_db():
 
     # Seed if empty
     cur.execute("SELECT COUNT(*) as c FROM users")
-    if cur.fetchone()["c"] == 0:
+    _cnt = cur.fetchone()
+    if (_cnt[0] if isinstance(_cnt,tuple) else _cnt["c"]) == 0:
         users = [
             (new_uid(), "Administrateur", "admin",     hash_pw("admin123"),  "admin",     True),
             (new_uid(), "Reception",      "reception", hash_pw("recep123"),  "reception", True),
@@ -147,7 +170,7 @@ def init_db():
             (new_uid(), "Technicien",     "tech",      hash_pw("tech123"),   "tech",      True),
             (new_uid(), "Direction",      "direction", hash_pw("dir123"),    "direction", True),
         ]
-        cur.executemany("INSERT INTO users VALUES (%s,%s,%s,%s,%s,%s)", users)
+        for _u in users: cur.execute("INSERT INTO users VALUES (%s,%s,%s,%s,%s,%s)", _u)
 
         perms = [
             ("reception","hotelcheck",True),("reception","maintenance",True),
@@ -161,10 +184,10 @@ def init_db():
             ("admin","hotelcheck",True),("admin","maintenance",True),
             ("admin","inventory_tech",True),("admin","inventory_pdj",True),("admin","inventory_fdc",True),
         ]
-        cur.executemany("INSERT INTO permissions VALUES (%s,%s,%s)", perms)
+        for _p in perms: cur.execute("INSERT INTO permissions VALUES (%s,%s,%s)", _p)
 
         locs = generate_locations()
-        cur.executemany("INSERT INTO locations VALUES (%s,%s,%s)", locs)
+        for _l in locs: cur.execute("INSERT INTO locations VALUES (%s,%s,%s)", _l)
 
         cur.execute("INSERT INTO tasks VALUES (%s,%s,%s,%s)",
             (new_uid(),"Lave-vaisselle","monthly","all"))
@@ -204,12 +227,12 @@ def login():
     db = get_db(); cur = db.cursor()
     cur.execute("SELECT * FROM users WHERE username=%s AND password=%s AND active=TRUE",
         (data.get("username",""), hash_pw(data.get("password",""))))
-    user = cur.fetchone()
+    user = fetchone_dict(cur)
     if not user:
         cur.close();db.close()
         return jsonify({"ok":False,"error":"Identifiants incorrects"})
     cur.execute("SELECT module, allowed FROM permissions WHERE role=%s", (user["role"],))
-    perms = {r["module"]: bool(r["allowed"]) for r in cur.fetchall()}
+    perms = {r["module"]: bool(r["allowed"]) for r in fetchall_dict(cur)}
     if user["role"] == "admin":
         for m in ["hotelcheck","maintenance","inventory_tech","inventory_pdj","inventory_fdc"]:
             perms[m] = True
@@ -223,25 +246,25 @@ def login():
 def get_data():
     db = get_db(); cur = db.cursor()
     cur.execute("SELECT id, name, active FROM locations ORDER BY name")
-    locations = [dict(r) for r in cur.fetchall()]
+    locations = fetchall_dict(cur)
     cur.execute("SELECT id, name, interval, location_scope FROM tasks")
-    tasks_raw = cur.fetchall()
+    tasks_raw = fetchall_dict(cur)
     cur.execute("SELECT id, name, color FROM staff")
-    staff = [dict(r) for r in cur.fetchall()]
+    staff = fetchall_dict(cur)
     cur.execute("SELECT * FROM checks")
-    checks_raw = cur.fetchall()
+    checks_raw = fetchall_dict(cur)
     cur.execute("SELECT * FROM history ORDER BY ts DESC LIMIT 500")
-    history = [dict(r) for r in cur.fetchall()]
+    history = fetchall_dict(cur)
     cur.execute("SELECT * FROM interventions ORDER BY date DESC")
-    interventions_raw = cur.fetchall()
+    interventions_raw = fetchall_dict(cur)
     cur.execute("SELECT id, name, username, role, active FROM users")
-    users = [dict(r) for r in cur.fetchall()]
+    users = fetchall_dict(cur)
     cur.execute("SELECT role, module, allowed FROM permissions")
-    perms_raw = cur.fetchall()
+    perms_raw = fetchall_dict(cur)
     cur.execute("SELECT * FROM inventory_items ORDER BY inv_type, category, name")
-    inv_items = cur.fetchall()
+    inv_items = fetchall_dict(cur)
     cur.execute("SELECT * FROM inventory_movements ORDER BY ts DESC LIMIT 1000")
-    inv_moves = cur.fetchall()
+    inv_moves = fetchall_dict(cur)
     cur.close();db.close()
 
     # Format tasks
