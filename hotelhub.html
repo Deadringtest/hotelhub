@@ -223,13 +223,15 @@ function getOverdue(){
   }
   return items;
 }
+function getMinQty(it){return it.minQty||it.min_qty||0;}
 function getLowStock(){
   var items=[];
   for(var t in S.data.inventory){
     var inv=S.data.inventory[t];
     for(var i=0;i<inv.items.length;i++){
       var it=inv.items[i];
-      if(it.minQty>0&&it.qty<=it.minQty)items.push({item:it,invType:t});
+      var mq=getMinQty(it);
+      if(mq>0&&it.qty<=mq)items.push({item:it,invType:t});
     }
   }
   return items;
@@ -344,10 +346,7 @@ function buildLogin(){
     div("","text-align:center;margin-bottom:24px;",[div("","font-size:38px;margin-bottom:6px;",["🏨"]),div("","font-size:19px;font-weight:700;color:#f0f6fc;",["HotelHub"]),div("","font-size:12px;color:#8b949e;margin-top:3px;",["Gestion hôtelière"])]),
     errMsg,uInp,pInp,loginBtn,
     div("","margin-top:18px;background:#0d1117;border-radius:8px;padding:10px 12px;font-size:11px;color:#8b949e;",[
-      div("","font-weight:600;margin-bottom:5px;",["Comptes par défaut :"]),
-      div("","",["admin / admin123  ·  reception / recep123"]),
-      div("","",["etage / etage123  ·  tech / tech123"]),
-      div("","",["direction / dir123"])
+      div("","font-weight:600;color:#8b949e;",["Contactez votre administrateur pour vos identifiants."])
     ])
   ]);
   return div("login-wrap","",[card]);
@@ -515,7 +514,7 @@ function buildAlerts(overdue,lowStock){
     var tbody=el("tbody");
     lowStock.forEach(function(ls,ri){
       var row=el("tr",{"class":ri%2===1?"alt":""});
-      ap(row,el("td",{"style":"font-weight:600;"},[ls.item.name]),el("td",{"style":"color:#8b949e;"},[ls.item.category||"—"]),el("td",{},[span("badge b-red","",[ls.item.qty+" "+(ls.item.unit||"")])]),el("td",{"style":"color:#8b949e;"},[ls.item.minQty+" "+(ls.item.unit||"")]),el("td",{},[span("badge b-grey","",[INV_NAMES[ls.invType]])]),el("td",{},[btn("→ Voir","btn-yellow btn-sm",function(){S.page="inventory";S.invTab=ls.invType;render();},"")]));
+      ap(row,el("td",{"style":"font-weight:600;"},[ls.item.name]),el("td",{"style":"color:#8b949e;"},[ls.item.category||"—"]),el("td",{},[span("badge b-red","",[ls.item.qty+" "+(ls.item.unit||"")])]),el("td",{"style":"color:#8b949e;"},[getMinQty(ls.item)+" "+(ls.item.unit||"")]),el("td",{},[span("badge b-grey","",[INV_NAMES[ls.invType]])]),el("td",{},[btn("→ Voir","btn-yellow btn-sm",function(){S.page="inventory";S.invTab=ls.invType;render();},"")]));
       ap(tbody,row);
     });
     ap(tbl,tbody);ap(stockCard,tbl);ap(page,stockCard);
@@ -801,7 +800,7 @@ function buildInvTab(tab){
   var inv=S.data.inventory[tab],items=inv.items||[],movements=inv.movements||[];
   var wrap=div("","");
   // Stats
-  var lowCount=items.filter(function(it){return it.minQty>0&&it.qty<=it.minQty;}).length;
+  var lowCount=items.filter(function(it){var mq=getMinQty(it);return mq>0&&it.qty<=mq;}).length;
   var srow=div("stats-row","");
   [{v:items.length,l:"Articles",c:"#58a6ff"},{v:lowCount,l:"Stock bas",c:lowCount>0?"#f85149":"#3fb950"},{v:movements.length,l:"Mouvements",c:"#8b949e"}].forEach(function(s){var b=div("stat-box","");ap(b,div("stat-val","color:"+s.c+";",[s.v]),div("stat-lbl","",[s.l]));ap(srow,b);});
   ap(wrap,srow);
@@ -880,7 +879,7 @@ function buildInvTab(tab){
   if(!catKeys.length){ap(wrap,div("card","",[ emptyState("📦","Aucun article.","Cliquez sur + Article.") ]));return wrap;}
   catKeys.forEach(function(cat){
     var catKey="inv_"+tab+"_cat_"+cat,catColl=!!S.ckCollapsed[catKey];
-    var lowInCat=cats[cat].filter(function(it){return it.minQty>0&&it.qty<=it.minQty;}).length;
+    var lowInCat=cats[cat].filter(function(it){var mq=getMinQty(it);return mq>0&&it.qty<=mq;}).length;
     var sec=div("","margin-bottom:8px;border:1px solid "+(lowInCat>0?"#4a3800":"#21262d")+";border-radius:8px;overflow:hidden;");
     var ch=div("","display:flex;align-items:center;gap:7px;padding:8px 12px;background:"+(lowInCat>0?"#1a1200":"#161b22")+";cursor:pointer;user-select:none;");
     ch.onclick=function(){S.ckCollapsed[catKey]=!S.ckCollapsed[catKey];render();};
@@ -890,13 +889,13 @@ function buildInvTab(tab){
     if(!catColl){
       var catBody=div("","background:#161b22;");
       cats[cat].forEach(function(it,ri){
-        var isLow=it.minQty>0&&it.qty<=it.minQty,isMid=it.minQty>0&&it.qty<=it.minQty*1.5&&!isLow;
+        var mq=getMinQty(it),isLow=mq>0&&it.qty<=mq,isMid=mq>0&&it.qty<=mq*1.5&&!isLow;
         var qColor=isLow?"qty-low":isMid?"qty-mid":"qty-ok";
         var irow=div("inv-item-row","background:"+(ri%2===1?"#0a0f15":"transparent")+";");
         ap(irow,div("inv-qty "+qColor,"",[it.qty+" "]));
         var info=div("","flex:1;min-width:0;");
         ap(info,div("","font-size:13px;font-weight:500;color:#c9d1d9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;",[it.name+(it.unit?" — "+it.unit:"")]));
-        if(isLow)ap(info,span("badge b-yellow","font-size:10px;",["⚠ Stock bas (min: "+it.minQty+")"]));
+        if(isLow)ap(info,span("badge b-yellow","font-size:10px;",["⚠ Stock bas (min: "+getMinQty(it)+")"]));
         ap(irow,info);
         // Quick +/- buttons
         var minus=div("","width:26px;height:26px;border-radius:5px;background:#3d1c1c;border:1px solid #6e2c2c;color:#f85149;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;flex-shrink:0;");
