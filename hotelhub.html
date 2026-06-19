@@ -130,11 +130,15 @@ var ROLES={
   etage:    {label:"Etage",    color:"#bc8cff",bg:"#2a1a3a"}
 };
 var MODULES=[
-  {id:"hotelcheck",    label:"HotelCheck",       icon:"📋"},
-  {id:"maintenance",   label:"Maintenance",       icon:"🔧"},
-  {id:"inventory_tech",label:"Inv. Tech",         icon:"⚙️"},
-  {id:"inventory_pdj", label:"Inv. PDJ",           icon:"🍳"},
-  {id:"inventory_fdc", label:"Inv. F.Chambre",    icon:"🛏️"}
+  {id:"hotelcheck",         label:"HotelCheck",        icon:"📋"},
+  {id:"alerts",             label:"Alertes",            icon:"🔴"},
+  {id:"maintenance",        label:"Maintenance",        icon:"🔧"},
+  {id:"inventory_tech",     label:"Inv. Tech",          icon:"⚙️"},
+  {id:"inventory_pdj",      label:"Inv. PDJ",           icon:"🍳"},
+  {id:"inventory_fdc",      label:"Inv. F.Chambre",     icon:"🛏️"},
+  {id:"inventory_reception",label:"Inv. Reception",     icon:"🛎️"},
+  {id:"stats",              label:"Stats/Historique",   icon:"📊"},
+  {id:"settings",           label:"Configuration",      icon:"🛠️"},
 ];
 var INTERVALS=[
   {value:"daily",    label:"Quotidien"},
@@ -155,8 +159,8 @@ var ICOLORS={
 var MONTHS=["Janvier","Fevrier","Mars","Avril","Mai","Juin","Juillet","Aout","Septembre","Octobre","Novembre","Decembre"];
 var STATUTS=["En cours","Resolu","En attente","Annule"];
 var STAFF_COLORS=["#388bfd","#3fb950","#d29922","#f78166","#bc8cff","#39c5cf","#ff6b9d","#ffa500"];
-var INV_NAMES={tech:"Inventaire Tech",pdj:"Inventaire PDJ",fdc:"Inv. Femmes de Chambre"};
-var INV_ICONS={tech:"⚙️",pdj:"🍳",fdc:"🛏️"};
+var INV_NAMES={tech:"Inventaire Tech",pdj:"Inventaire PDJ",fdc:"Inv. Femmes de Chambre",reception:"Inv. Reception"};
+var INV_ICONS={tech:"⚙️",pdj:"🍳",fdc:"🛏️",reception:"🛎️"};
 
 // ============================================================
 // STATE
@@ -206,7 +210,17 @@ function hoursLeft(iv){return Math.max(0,(getPeriodEnd(iv)-new Date())/3600000);
 function checkKey(lid,tid,iv){return lid+"__"+tid+"__"+getPeriodKey(iv);}
 function intLabel(iv){for(var i=0;i<INTERVALS.length;i++)if(INTERVALS[i].value===iv)return INTERVALS[i].label;return iv;}
 function locApplies(t,locId){var s=t.locationScope||"all";if(s==="all")return true;for(var i=0;i<s.length;i++)if(s[i]===locId)return true;return false;}
-function canAccess(mod){return S.permissions[mod]===true;}
+function canAccess(mod){
+  // Admin always has access to everything
+  if(S.user&&S.user.role==="admin")return true;
+  // Alerts follow hotelcheck permission if not explicitly set
+  if(mod==="alerts")return S.permissions["alerts"]===true||S.permissions["hotelcheck"]===true;
+  // Stats follow maintenance permission if not explicitly set
+  if(mod==="stats")return S.permissions["stats"]===true||S.permissions["maintenance"]===true;
+  // Settings restricted to admin/direction by default
+  if(mod==="settings")return S.permissions["settings"]===true||(S.user&&S.user.role==="direction");
+  return S.permissions[mod]===true;
+}
 function isMobile(){return window.innerWidth<580;}
 function getOverdue(){
   var items=[],activeLocs=S.data.locations.filter(function(l){return l.active;});
@@ -404,7 +418,7 @@ function buildMain(){
   else if(S.page==="maintenance"&&canAccess("maintenance"))ap(content,buildMaintenance());
   else if(S.page==="inventory")                            ap(content,buildInventory());
   else if(S.page==="admin"&&S.user&&S.user.role==="admin") ap(content,buildAdmin());
-  else if(S.page==="settings")                             ap(content,buildSettings());
+  else if(S.page==="settings"&&canAccess("settings")) ap(content,buildSettings());
   else ap(content,div("page","",["Accès non autorisé."]));
   ap(wrap,content);
   if(S.ckStaffPicker)ap(wrap,buildStaffModal());
@@ -430,7 +444,7 @@ function buildNav(overdue,lowStock){
   var hasInv=canAccess("inventory_tech")||canAccess("inventory_pdj")||canAccess("inventory_fdc");
   if(hasInv) pages.push(["inventory","📦 Inv."]);
   if(S.user&&S.user.role==="admin") pages.push(["admin","⚙️ Admin"]);
-  pages.push(["settings","🛠"]);
+  if(canAccess("settings")) pages.push(["settings","🛠"]);
 
   pages.forEach(function(p){
     var id=p[0],label=p[1];
@@ -490,7 +504,7 @@ function buildDashboard(overdue,lowStock){
   if(canAccess("maintenance")) cards.push(["maintenance","🔧","Maintenance","Registre interventions","b-green"]);
   if(canAccess("inventory_tech")||canAccess("inventory_pdj")||canAccess("inventory_fdc")) cards.push(["inventory","📦","Inventaire","Tech · PDJ · F.Chambre","b-yellow"]);
   if(S.user&&S.user.role==="admin") cards.push(["admin","⚙️","Admin","Utilisateurs & droits","b-purple"]);
-  cards.push(["settings","🛠","Configuration","Tâches · Localisations · Équipe","b-grey"]);
+  if(canAccess("settings")) cards.push(["settings","🛠","Configuration","Tâches · Localisations · Équipe","b-grey"]);
 
   cards.forEach(function(c){
     var dc=div("dash-card","");
@@ -824,6 +838,7 @@ function buildInventory(){
   if(canAccess("inventory_tech"))tabs.push("tech");
   if(canAccess("inventory_pdj"))tabs.push("pdj");
   if(canAccess("inventory_fdc"))tabs.push("fdc");
+  if(canAccess("inventory_reception"))tabs.push("reception");
   if(!tabs.length){ap(page,div("","color:#8b949e;",["Accès non autorisé."]));return page;}
   if(tabs.indexOf(S.invTab)<0)S.invTab=tabs[0];
   var tabRow=div("","display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;");
