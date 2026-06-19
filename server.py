@@ -146,6 +146,8 @@ def login():
 
 @app.route("/api/data", methods=["GET"])
 def get_data():
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return jsonify({"error": "SUPABASE_URL or SUPABASE_KEY not configured"}), 500
     try:
         locations     = sb_get("locations",     "order=name")
         tasks_raw     = sb_get("tasks",         "")
@@ -355,6 +357,21 @@ def info():
         ip=s.getsockname()[0];s.close()
     except: ip="127.0.0.1"
     return jsonify({"ip":ip,"port":PORT,"supabase":bool(SUPABASE_URL)})
+
+@app.route("/api/debug")
+def debug():
+    """Check config and test Supabase connection"""
+    result = {
+        "supabase_url": SUPABASE_URL[:40]+"..." if SUPABASE_URL else "NOT SET",
+        "supabase_key": SUPABASE_KEY[:20]+"..." if SUPABASE_KEY else "NOT SET",
+        "html_exists": os.path.exists(HTML_FILE),
+    }
+    try:
+        test = sb_get("users", "limit=1")
+        result["db_connection"] = "OK - got %d rows" % len(test)
+    except Exception as e:
+        result["db_connection"] = "ERROR: " + str(e)
+    return jsonify(result)
 
 def run_server():
     app.run(host="0.0.0.0", port=PORT, debug=False, threaded=True)
