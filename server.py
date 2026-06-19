@@ -191,9 +191,10 @@ def get_data():
 
     # Format inventory
     inventory = {
-        "tech": {"items": [], "movements": []},
-        "pdj":  {"items": [], "movements": []},
-        "fdc":  {"items": [], "movements": []}
+        "tech":      {"items": [], "movements": []},
+        "pdj":       {"items": [], "movements": []},
+        "fdc":       {"items": [], "movements": []},
+        "reception": {"items": [], "movements": []}
     }
     for it in inv_items:
         t2 = it.get("inv_type", "")
